@@ -1,0 +1,71 @@
+
+/* 1. Light Theme (Default) */
+:root {
+  --bg-color: #f0f2f5;
+  --text-color: #212529;
+  --card-bg-color: #ffffff;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --input-bg-color: #ffffff;
+  --input-border-color: #ced4da;
+  --primary-color: #0d6efd;
+  --notification-pendente-bg: #dc3545;
+  --notification-resolvido-bg: #198754;
+  --notification-text-color: #ffffff;
+}
+
+/* 2. Dark Theme Overrides */
+[data-theme="dark"] {
+  --bg-color: #121212;
+  --text-color: #e0e0e0;
+  --card-bg-color: #1e1e1e;
+  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --input-bg-color: #2c2c2c;
+  --input-border-color: #444444;
+  --primary-color: #1976d2;
+}
+
+/* 3. General Styles */
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  padding-bottom: 50px;
+}
+
+.card {
+  background-color: var(--card-bg-color);
+  border: 1px solid var(--input-border-color);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+}
+
+.btn-primary { background-color: var(--primary-color); border: none; }
+.btn-primary:hover { filter: brightness(90%); }
+
+.navbar {
+  background-color: var(--card-bg-color) !important;
+  box-shadow: var(--card-shadow);
+}
+.navbar .navbar-brand { color: var(--text-color); display: flex; align-items: center; }
+.navbar-logo { height: 1.8em; margin-right: 10px; }
+
+.notification-card { padding: 15px; margin-bottom: 10px; border-radius: 8px; color: var(--notification-text-color); }
+.notification-pendente { background-color: var(--notification-pendente-bg); }
+.notification-resolvido { background-color: var(--notification-resolvido-bg); }
+
+.plate-highlight { font-size: 1.4em; font-weight: bold; font-family: monospace; padding: 2px 6px; background-color: rgba(0,0,0,0.1); border-radius: 4px; display: inline-block; margin-bottom: 5px; }
+
+.form-label { color: var(--text-color); }
+.form-control, .form-select { background-color: var(--input-bg-color); border-color: var(--input-border-color); color: var(--text-color); }
+.form-control:focus, .form-select:focus { background-color: var(--input-bg-color); border-color: var(--primary-color); color: var(--text-color); box-shadow: 0 0 0 0.25rem rgba(var(--primary-color), 0.25); }
+
+.stat-card-container { display: flex; gap: 15px; margin-bottom: 20px; }
+.stat-card { background-color: var(--card-bg-color); padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; border: 1px solid var(--input-border-color); font-weight: 500; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--card-shadow); }
+.stat-card.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+
+.theme-toggler { position: fixed; top: 15px; right: 15px; background: var(--card-bg-color); color: var(--text-color); border: 1px solid var(--input-border-color); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1050; }
+.navbar .theme-toggler { position: static; margin-left: 15px; }
+
+footer { position: fixed; bottom: 0; width: 100%; text-align: center; padding: 10px 0; font-size: 0.8rem; color: var(--text-color); opacity: 0.6; }

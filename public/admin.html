@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Sistema de Notificações de Pendências DCAR</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar px-3">
+    <span class="navbar-brand">
+        <img src="/detran-roraima.png" alt="Logo" class="navbar-logo">
+        <span>👑 Painel Admin - DCAR</span>
+    </span>
+    <div class="d-flex align-items-center">
+        <a href="/painel.html" class="btn btn-secondary me-2">Painel Principal</a>
+        <a href="/register.html" class="btn btn-success me-2">Criar Usuário</a>
+        <button id="logoutBtn" class="btn btn-danger">Sair</button>
+        <button class="theme-toggler" id="themeToggler">🌙</button>
+    </div>
+  </nav>
+
+  <div class="container-fluid mt-4">
+    <div class="card p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h3>Gerenciamento de Usuários</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr><th>ID</th><th>Nome</th><th>Login</th><th>Tipo</th><th>Ações</th></tr>
+                </thead>
+                <tbody id="usersTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card p-3">
+        <h3>Gerenciamento de Pendências</h3>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr><th>ID</th><th>Placa</th><th>Status</th><th>Criador</th><th>Despachante</th><th>Criado em</th><th>Resolvido em</th><th>Ações</th></tr>
+                </thead>
+                <tbody id="pendenciasTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+  </div>
+
+  <!-- User Edit Modal -->
+  <div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Editar Usuário</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <form id="userForm"><input type="hidden" id="userId"><div class="mb-3"><label for="userName" class="form-label">Nome</label><input type="text" class="form-control" id="userName" required></div><div class="mb-3"><label for="userLogin" class="form-label">Login</label><input type="text" class="form-control" id="userLogin" required></div><div class="mb-3"><label for="userType" class="form-label">Tipo</label><select class="form-select" id="userType" required><option value="admin">Admin</option><option value="funcionario">Funcionário</option><option value="despachante">Despachante</option></select></div><div class="mb-3"><label for="userPassword" class="form-label">Nova Senha (deixe em branco para não alterar)</label><input type="password" class="form-control" id="userPassword"></div></form>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-primary" id="saveUserBtn">Salvar</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pendencia Edit Modal -->
+  <div class="modal fade" id="pendenciaModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Editar Pendência</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <form id="pendenciaForm"><input type="hidden" id="pendenciaId"><div class="mb-3"><label for="pendenciaPlaca" class="form-label">Placa</label><input type="text" class="form-control" id="pendenciaPlaca" required maxlength="7" pattern=".{7,7}" title="A placa deve ter exatamente 7 caracteres." oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')"></div><div class="mb-3"><label for="pendenciaDescricao" class="form-label">Descrição</label><textarea class="form-control" id="pendenciaDescricao"></textarea></div><div class="mb-3"><label for="pendenciaStatus" class="form-label">Status</label><select class="form-select" id="pendenciaStatus" required><option value="pendente">Pendente</option><option value="resolvido">Resolvido</option><option value="triado">Triado</option></select></div></form>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-primary" id="savePendenciaBtn">Salvar</button></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>desenvolvido por AA™</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Auth Check
+(async function() {
+    try {
+        const res = await fetch('/api/session');
+        if (!res.ok) throw new Error('Sessão inválida');
+        const { user } = await res.json();
+        if (user.tipo !== 'admin') throw new Error('Acesso negado');
+    } catch (e) {
+        alert(e.message || 'Você precisa ser um administrador para acessar esta página.');
+        window.location.href = '/';
+    }
+})();
+
+const themeToggler = document.getElementById('themeToggler');
+function setTheme(theme) { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); themeToggler.innerHTML = theme === 'dark' ? '☀️' : '🌙'; }
+themeToggler.addEventListener('click', () => { const currentTheme = document.documentElement.getAttribute('data-theme'); setTheme(currentTheme === 'dark' ? 'light' : 'dark'); });
+const savedTheme = localStorage.getItem('theme');
+const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+if (savedTheme) { setTheme(savedTheme); } else if (prefersDark) { setTheme('dark'); } else { setTheme('light'); }
+
+const userModal = new bootstrap.Modal(document.getElementById('userModal'));
+const pendenciaModal = new bootstrap.Modal(document.getElementById('pendenciaModal'));
+async function fetchData(url) { const res = await fetch(url); if (!res.ok) { const err = await res.json(); throw new Error(err.error || `Falha ao buscar dados de ${url}`); } return res.json(); }
+async function sendData(url, method, data) { const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!res.ok) { const err = await res.json(); throw new Error(err.error || `Falha ao enviar dados para ${url}`); } return res.json(); }
+function formatDate(dateString) { if (!dateString) return '-'; return new Date(dateString).toLocaleString('pt-BR'); }
+async function loadUsers() { const users = await fetchData('/api/admin/users'); const tbody = document.getElementById('usersTableBody'); tbody.innerHTML = ''; users.forEach(u => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${u.id}</td><td>${u.nome}</td><td>${u.login}</td><td>${u.tipo}</td><td><button class="btn btn-sm btn-primary" onclick='editUser(${JSON.stringify(u)})'>Editar</button> <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Deletar</button></td>`; tbody.appendChild(tr); }); }
+function editUser(user) { document.getElementById('userId').value = user.id; document.getElementById('userName').value = user.nome; document.getElementById('userLogin').value = user.login; document.getElementById('userType').value = user.tipo; document.getElementById('userPassword').value = ''; userModal.show(); }
+async function deleteUser(id) { if (!confirm(`Deletar usuário ID ${id}?`)) return; try { await sendData(`/api/admin/users/${id}`, 'DELETE'); loadUsers(); } catch (e) { alert(e.message); } }
+async function loadPendencias() { const pendencias = await fetchData('/api/admin/pendencias'); const tbody = document.getElementById('pendenciasTableBody'); tbody.innerHTML = ''; pendencias.forEach(p => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${p.id}</td><td>${p.placa}</td><td>${p.status}</td><td>${p.criador_nome || '-'}</td><td>${p.despachante_nome || '-'}</td><td>${formatDate(p.criado_em)}</td><td>${formatDate(p.resolvido_em)}</td><td><button class="btn btn-sm btn-primary" onclick='editPendencia(${JSON.stringify(p)})'>Editar</button> <button class="btn btn-sm btn-danger" onclick="deletePendencia(${p.id})">Deletar</button></td>`; tbody.appendChild(tr); }); }
+function editPendencia(p) { document.getElementById('pendenciaId').value = p.id; document.getElementById('pendenciaPlaca').value = p.placa; document.getElementById('pendenciaDescricao').value = p.descricao; document.getElementById('pendenciaStatus').value = p.status; pendenciaModal.show(); }
+async function deletePendencia(id) { if (!confirm(`Deletar pendência ID ${id}?`)) return; try { await sendData(`/api/admin/pendencias/${id}`, 'DELETE'); loadPendencias(); } catch (e) { alert(e.message); } }
+document.addEventListener('DOMContentLoaded', async () => { try { await Promise.all([loadUsers(), loadPendencias()]); } catch (e) { alert(`Falha ao carregar dados: ${e.message}`); } document.getElementById('saveUserBtn').addEventListener('click', async () => { const id = document.getElementById('userId').value; const data = { nome: document.getElementById('userName').value, login: document.getElementById('userLogin').value, tipo: document.getElementById('userType').value, senha: document.getElementById('userPassword').value }; if (!data.senha) delete data.senha; try { await sendData(`/api/admin/users/${id}`, 'PUT', data); userModal.hide(); loadUsers(); } catch (e) { alert(e.message); } }); document.getElementById('savePendenciaBtn').addEventListener('click', async () => { const id = document.getElementById('pendenciaId').value; const data = { placa: document.getElementById('pendenciaPlaca').value, descricao: document.getElementById('pendenciaDescricao').value, status: document.getElementById('pendenciaStatus').value }; try { await sendData(`/api/admin/pendencias/${id}`, 'PUT', data); pendenciaModal.hide(); loadPendencias(); } catch (e) { alert(e.message); } }); });
+document.getElementById('logoutBtn').addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; });
+</script>
+</body>
+</html>
