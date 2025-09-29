@@ -1,0 +1,86 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cadastro - Sistema de Notificações de Pendências DCAR</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="d-flex align-items-center justify-content-center vh-100">
+
+  <button class="theme-toggler" id="themeToggler">🌙</button>
+
+  <div class="card p-4" style="width: 350px;">
+    <h3 class="text-center mb-3">📝 Cadastro de Novo Usuário</h3>
+    <form id="registerForm">
+      <div class="mb-3">
+        <label for="nome" class="form-label">Nome</label>
+        <input type="text" class="form-control" id="nome" required>
+      </div>
+      <div class="mb-3">
+        <label for="loginReg" class="form-label">Usuário</label>
+        <input type="text" class="form-control" id="loginReg" required>
+      </div>
+      <div class="mb-3">
+        <label for="senhaReg" class="form-label">Senha</label>
+        <input type="password" class="form-control" id="senhaReg" required>
+      </div>
+      <div class="mb-3">
+        <label for="tipo" class="form-label">Tipo</label>
+        <select class="form-select" id="tipo" required>
+          <option value="funcionario">Funcionário</option>
+          <option value="despachante">Despachante</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-success w-100">Cadastrar</button>
+    </form>
+    <div class="text-center mt-3">
+        <a href="/">Já tem uma conta? Fazer login</a>
+    </div>
+  </div>
+
+  <footer>
+    desenvolvido por AA™
+  </footer>
+
+<script>
+const themeToggler = document.getElementById('themeToggler');
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    themeToggler.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+}
+themeToggler.addEventListener('click', () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
+const savedTheme = localStorage.getItem('theme');
+const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+if (savedTheme) { setTheme(savedTheme); } else if (prefersDark) { setTheme('dark'); } else { setTheme('light'); }
+
+// Register Logic
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById('nome').value;
+  const login = document.getElementById('loginReg').value;
+  const senha = document.getElementById('senhaReg').value;
+  const tipo = document.getElementById('tipo').value;
+
+  const res = await fetch('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome, login, senha, tipo })
+  });
+
+  if (res.ok) {
+    alert('Usuário cadastrado com sucesso! Agora você será redirecionado para a página de login.');
+    window.location.href = '/';
+  } else {
+    alert('Erro ao cadastrar usuário. Verifique se o login já existe.');
+  }
+});
+</script>
+</body>
+</html>
