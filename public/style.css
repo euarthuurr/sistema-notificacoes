@@ -94,8 +94,42 @@ a {
   align-items: center;
 }
 
+.form-check-input {
+  margin-right: 0.5em;
+}
+
 [data-theme="dark"] .form-check-label {
   color: #ffffff; /* Branco */
+}
+
+/* Admin Stats Box */
+.stat-box {
+  background-color: var(--card-bg-color);
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: var(--card-shadow);
+}
+.stat-box h4 {
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  color: var(--text-color);
+  opacity: 0.8;
+}
+.stat-box p {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.management-buttons {
+  text-align: center;
+  margin-top: 30px;
+}
+.management-buttons .btn {
+  margin: 0 10px;
+  padding: 15px 30px;
+  font-size: 1.2rem;
 }
 
 .stat-card-container { display: flex; gap: 15px; margin-bottom: 20px; }
@@ -107,3 +141,17 @@ a {
 .navbar .theme-toggler { position: static; margin-left: 15px; }
 
 footer { position: fixed; bottom: 0; width: 100%; text-align: center; padding: 10px 0; font-size: 0.8rem; color: var(--text-color); opacity: 0.6; }
+
+/* Estilos específicos para a página de login */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding-bottom: 0; /* Remove o padding que causava a rolagem */
+  overflow: hidden; /* Garante que não haja rolagem */
+}
+
+.login-page footer {
+  display: none; /* Oculta o footer global nesta página */
+}

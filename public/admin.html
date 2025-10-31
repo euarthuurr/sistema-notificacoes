@@ -16,42 +16,91 @@
     <div class="d-flex align-items-center">
         <a href="/painel.html" class="btn btn-secondary me-2">Painel Principal</a>
         <a href="/register.html" class="btn btn-success me-2">Criar Usuário</a>
+        <button id="changePasswordBtn" class="btn btn-warning me-2">Alterar Senha</button>
         <button id="logoutBtn" class="btn btn-danger">Sair</button>
         <button class="theme-toggler" id="themeToggler">🌙</button>
     </div>
   </nav>
 
   <div class="container-fluid mt-4">
-    <div class="card p-3 mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-2" data-bs-toggle="collapse" href="#usersTableCollapse" role="button" aria-expanded="false" aria-controls="usersTableCollapse" style="cursor: pointer;">
-            <h3>Gerenciamento de Usuários ▼</h3>
+    <!-- Stats Section -->
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <div class="stat-box">
+          <h4>Total de Usuários</h4>
+          <p id="stats-users">...</p>
         </div>
-        <div class="collapse" id="usersTableCollapse">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover">
-                    <thead>
-                        <tr><th>ID</th><th>Nome</th><th>Login</th><th>Tipo</th><th>Ações</th></tr>
-                    </thead>
-                    <tbody id="usersTableBody"></tbody>
-                </table>
-            </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-box">
+          <h4>Pendências Ativas</h4>
+          <p id="stats-pendentes">...</p>
         </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-box">
+          <h4>Pendências Resolvidas</h4>
+          <p id="stats-resolvidas">...</p>
+        </div>
+      </div>
     </div>
 
-    <div class="card p-3">
-        <div class="d-flex justify-content-between align-items-center mb-2" data-bs-toggle="collapse" href="#pendenciasTableCollapse" role="button" aria-expanded="false" aria-controls="pendenciasTableCollapse" style="cursor: pointer;">
-            <h3>Gerenciamento de Pendências ▼</h3>
+    <!-- Management Buttons -->
+    <div class="management-buttons">
+      <button class="btn btn-lg btn-primary" data-bs-toggle="modal" data-bs-target="#manageUsersModal">Gerenciar Usuários</button>
+      <button class="btn btn-lg btn-secondary" data-bs-toggle="modal" data-bs-target="#managePendenciasModal">Gerenciar Pendências</button>
+    </div>
+  </div>
+
+  <!-- Manage Users Modal -->
+  <div class="modal fade" id="manageUsersModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Gerenciamento de Usuários</h5>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="generateReport('users', 'pdf')">Exportar PDF</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="generateReport('users', 'xlsx')">Exportar XLSX</button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
         </div>
-        <div class="collapse" id="pendenciasTableCollapse">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover">
-                    <thead>
-                        <tr><th>ID</th><th>Placa</th><th>Status</th><th>Criador</th><th>Despachante</th><th>Criado em</th><th>Resolvido em</th><th>Ações</th></tr>
-                    </thead>
-                    <tbody id="pendenciasTableBody"></tbody>
-                </table>
-            </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr><th>ID</th><th>Nome</th><th>Login</th><th>Tipo</th><th>Ações</th></tr>
+              </thead>
+              <tbody id="usersTableBody"></tbody>
+            </table>
+          </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage Pendencias Modal -->
+  <div class="modal fade" id="managePendenciasModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Gerenciamento de Pendências</h5>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="generateReport('pendencias', 'pdf')">Exportar PDF</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="generateReport('pendencias', 'xlsx')">Exportar XLSX</button>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr><th>ID</th><th>Placa</th><th>Status</th><th>Criador</th><th>Despachante</th><th>Criado em</th><th>Resolvido em</th><th>Ações</th></tr>
+              </thead>
+              <tbody id="pendenciasTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -77,6 +126,34 @@
           <form id="pendenciaForm"><input type="hidden" id="pendenciaId"><div class="mb-3"><label for="pendenciaPlaca" class="form-label">Placa</label><input type="text" class="form-control" id="pendenciaPlaca" required maxlength="7" pattern=".{7,7}" title="A placa deve ter exatamente 7 caracteres." oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')"></div><div class="mb-3"><label for="pendenciaDescricao" class="form-label">Descrição</label><textarea class="form-control" id="pendenciaDescricao"></textarea></div><div class="mb-3"><label for="pendenciaStatus" class="form-label">Status</label><select class="form-select" id="pendenciaStatus" required><option value="pendente">Pendente</option><option value="resolvido">Resolvido</option><option value="triado">Triado</option></select></div></form>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-primary" id="savePendenciaBtn">Salvar</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change Password Modal -->
+  <div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Alterar Senha</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="changePasswordForm">
+            <div class="mb-3">
+              <label for="oldPassword" class="form-label">Senha Antiga</label>
+              <input type="password" class="form-control" id="oldPassword" required>
+            </div>
+            <div class="mb-3">
+              <label for="newPassword" class="form-label">Nova Senha</label>
+              <input type="password" class="form-control" id="newPassword" required>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="btn btn-primary" id="savePasswordBtn">Salvar Nova Senha</button>
+        </div>
       </div>
     </div>
   </div>
@@ -113,17 +190,54 @@ if (savedTheme) { setTheme(savedTheme); } else if (prefersDark) { setTheme('dark
 
 const userModal = new bootstrap.Modal(document.getElementById('userModal'));
 const pendenciaModal = new bootstrap.Modal(document.getElementById('pendenciaModal'));
+const changePasswordModal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
+
 async function fetchData(url) { const res = await fetch(url, { credentials: 'include' }); if (!res.ok) { const err = await res.json(); throw new Error(err.error || `Falha ao buscar dados de ${url}`); } return res.json(); }
 async function sendData(url, method, data) { const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), credentials: 'include' }); if (!res.ok) { const err = await res.json(); throw new Error(err.error || `Falha ao enviar dados para ${url}`); } return res.json(); }
 function formatDate(dateString) { if (!dateString) return '-'; return new Date(dateString).toLocaleString('pt-BR'); }
+
+function generateReport(type, format) {
+    window.location.href = `/api/admin/report?type=${type}&format=${format}`;
+}
+
+async function loadStats() {
+    try {
+        const stats = await fetchData('/api/admin/stats');
+        document.getElementById('stats-users').textContent = stats.userCount;
+        document.getElementById('stats-pendentes').textContent = stats.pendenteCount;
+        document.getElementById('stats-resolvidas').textContent = stats.resolvidoCount;
+    } catch (e) {
+        console.error("Falha ao carregar estatísticas:", e);
+    }
+}
+
 async function loadUsers() { const users = await fetchData('/api/admin/users'); const tbody = document.getElementById('usersTableBody'); tbody.innerHTML = ''; users.forEach(u => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${u.id}</td><td>${u.nome}</td><td>${u.login}</td><td>${u.tipo}</td><td><button class="btn btn-sm btn-primary" onclick='editUser(${JSON.stringify(u)})'>Editar</button> <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Deletar</button></td>`; tbody.appendChild(tr); }); }
 function editUser(user) { document.getElementById('userId').value = user.id; document.getElementById('userName').value = user.nome; document.getElementById('userLogin').value = user.login; document.getElementById('userType').value = user.tipo; document.getElementById('userPassword').value = ''; userModal.show(); }
 async function deleteUser(id) { if (!confirm(`Deletar usuário ID ${id}?`)) return; try { await sendData(`/api/admin/users/${id}`, 'DELETE'); loadUsers(); } catch (e) { alert(e.message); } }
 async function loadPendencias() { const pendencias = await fetchData('/api/admin/pendencias'); const tbody = document.getElementById('pendenciasTableBody'); tbody.innerHTML = ''; pendencias.forEach(p => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${p.id}</td><td>${p.placa}</td><td>${p.status}</td><td>${p.criador_nome || '-'}</td><td>${p.despachante_nome || '-'}</td><td>${formatDate(p.criado_em)}</td><td>${formatDate(p.resolvido_em)}</td><td><button class="btn btn-sm btn-primary" onclick='editPendencia(${JSON.stringify(p)})'>Editar</button> <button class="btn btn-sm btn-danger" onclick="deletePendencia(${p.id})">Deletar</button></td>`; tbody.appendChild(tr); }); }
 function editPendencia(p) { document.getElementById('pendenciaId').value = p.id; document.getElementById('pendenciaPlaca').value = p.placa; document.getElementById('pendenciaDescricao').value = p.descricao; document.getElementById('pendenciaStatus').value = p.status; pendenciaModal.show(); }
 async function deletePendencia(id) { if (!confirm(`Deletar pendência ID ${id}?`)) return; try { await sendData(`/api/admin/pendencias/${id}`, 'DELETE'); loadPendencias(); } catch (e) { alert(e.message); } }
-document.addEventListener('DOMContentLoaded', async () => { try { await Promise.all([loadUsers(), loadPendencias()]); } catch (e) { alert(`Falha ao carregar dados: ${e.message}`); } document.getElementById('saveUserBtn').addEventListener('click', async () => { const id = document.getElementById('userId').value; const data = { nome: document.getElementById('userName').value, login: document.getElementById('userLogin').value, tipo: document.getElementById('userType').value, senha: document.getElementById('userPassword').value }; if (!data.senha) delete data.senha; try { await sendData(`/api/admin/users/${id}`, 'PUT', data); userModal.hide(); loadUsers(); } catch (e) { alert(e.message); } }); document.getElementById('savePendenciaBtn').addEventListener('click', async () => { const id = document.getElementById('pendenciaId').value; const data = { placa: document.getElementById('pendenciaPlaca').value, descricao: document.getElementById('pendenciaDescricao').value, status: document.getElementById('pendenciaStatus').value }; try { await sendData(`/api/admin/pendencias/${id}`, 'PUT', data); pendenciaModal.hide(); loadPendencias(); } catch (e) { alert(e.message); } }); });
+document.addEventListener('DOMContentLoaded', async () => { try { await Promise.all([loadUsers(), loadPendencias(), loadStats()]); } catch (e) { alert(`Falha ao carregar dados: ${e.message}`); } document.getElementById('saveUserBtn').addEventListener('click', async () => { const id = document.getElementById('userId').value; const data = { nome: document.getElementById('userName').value, login: document.getElementById('userLogin').value, tipo: document.getElementById('userType').value, senha: document.getElementById('userPassword').value }; if (!data.senha) delete data.senha; try { await sendData(`/api/admin/users/${id}`, 'PUT', data); userModal.hide(); loadUsers(); } catch (e) { alert(e.message); } }); document.getElementById('savePendenciaBtn').addEventListener('click', async () => { const id = document.getElementById('pendenciaId').value; const data = { placa: document.getElementById('pendenciaPlaca').value, descricao: document.getElementById('pendenciaDescricao').value, status: document.getElementById('pendenciaStatus').value }; try { await sendData(`/api/admin/pendencias/${id}`, 'PUT', data); pendenciaModal.hide(); loadPendencias(); } catch (e) { alert(e.message); } }); });
 document.getElementById('logoutBtn').addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST', credentials: 'include' }); window.location.href = '/'; });
+document.getElementById('changePasswordBtn').addEventListener('click', () => {
+    document.getElementById('changePasswordForm').reset();
+    changePasswordModal.show();
+});
+document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+    const oldPassword = document.getElementById('oldPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    if (!oldPassword || !newPassword) {
+        alert('Por favor, preencha todos os campos.');
+        return;
+    }
+    try {
+        await sendData('/api/change-password', 'POST', { oldPassword, newPassword });
+        changePasswordModal.hide();
+        alert('Senha alterada com sucesso!');
+    } catch (e) {
+        alert(e.message);
+    }
+});
 </script>
 </body>
 </html>
