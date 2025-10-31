@@ -14,6 +14,7 @@
         <span>Sistema de Notificações de Pendências DCAR</span>
     </span>
     <div class="d-flex align-items-center">
+      <button id="changePasswordBtn" class="btn btn-warning me-2">Alterar Senha</button>
       <button id="logoutBtn" class="btn btn-danger">Sair</button>
       <button class="theme-toggler" id="themeToggler">🌙</button>
     </div>
@@ -72,6 +73,34 @@
     </div>
   </div>
 
+  <!-- Change Password Modal -->
+  <div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Alterar Senha</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="changePasswordForm">
+            <div class="mb-3">
+              <label for="oldPassword" class="form-label">Senha Antiga</label>
+              <input type="password" class="form-control" id="oldPassword" required>
+            </div>
+            <div class="mb-3">
+              <label for="newPassword" class="form-label">Nova Senha</label>
+              <input type="password" class="form-control" id="newPassword" required>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+          <button type="button" class="btn btn-primary" id="savePasswordBtn">Salvar Nova Senha</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <footer>
     desenvolvido por AA™
   </footer>
@@ -96,6 +125,7 @@ let currentUser = null;
 let allPendencias = [];
 let currentFilter = 'all';
 let reopenModal;
+let changePasswordModal;
 
 function copyToClipboard(button, text) {
     navigator.clipboard.writeText(text).then(() => {
@@ -128,6 +158,7 @@ async function loadDespachantes() {
 async function init() {
   try {
     reopenModal = new bootstrap.Modal(document.getElementById('reopenModal'));
+    changePasswordModal = new bootstrap.Modal(document.getElementById('changePasswordModal'));
 
     const sessionRes = await fetch('/api/session', { credentials: 'include' });
     if (!sessionRes.ok) throw new Error('Not authenticated');
@@ -260,6 +291,36 @@ document.getElementById('pendenciaForm').addEventListener('submit', async (e) =>
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST', credentials: 'include' });
   window.location.href = '/';
+});
+
+document.getElementById('changePasswordBtn').addEventListener('click', () => {
+    document.getElementById('changePasswordForm').reset();
+    changePasswordModal.show();
+});
+
+document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+    const oldPassword = document.getElementById('oldPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    if (!oldPassword || !newPassword) {
+        alert('Por favor, preencha todos os campos.');
+        return;
+    }
+    try {
+        const res = await fetch('/api/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldPassword, newPassword }),
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Falha ao alterar a senha');
+        }
+        changePasswordModal.hide();
+        alert('Senha alterada com sucesso!');
+    } catch (e) {
+        alert(e.message);
+    }
 });
 
 init();

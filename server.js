@@ -11,6 +11,8 @@ const session = require('express-session');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const SQLiteStore = require('connect-sqlite3')(session);
+const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
 
 const PORT = process.env.PORT || 8080;
 const BCRYPT_ROUNDS = 10;
@@ -104,6 +106,100 @@ const isAdmin = (req, res, next) => {
     res.status(403).json({ error: 'Acesso negado' });
 };
 
+app.get('/api/admin/stats', isAdmin, async (req, res) => {
+  try {
+    const userCount = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM usuarios", (err, row) => err ? reject(err) : resolve(row.count));
+    });
+    const pendenteCount = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM pendencias WHERE status = 'pendente'", (err, row) => err ? reject(err) : resolve(row.count));
+    });
+    const resolvidoCount = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM pendencias WHERE status = 'resolvido'", (err, row) => err ? reject(err) : resolve(row.count));
+    });
+    res.json({ userCount, pendenteCount, resolvidoCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
+  }
+});
+
+app.get('/api/admin/report', isAdmin, async (req, res) => {
+  const { type, format } = req.query;
+
+  try {
+    if (type === 'users') {
+      db.all("SELECT id, nome, login, tipo FROM usuarios", async (err, data) => {
+        if (err) return res.status(500).json({ error: 'Erro ao buscar usuários' });
+
+        if (format === 'pdf') {
+          const doc = new PDFDocument();
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', 'attachment; filename=usuarios.pdf');
+          doc.pipe(res);
+          doc.fontSize(18).text('Relatório de Usuários', { align: 'center' });
+          doc.moveDown();
+          data.forEach(user => {
+            doc.fontSize(12).text(`ID: ${user.id}, Nome: ${user.nome}, Login: ${user.login}, Tipo: ${user.tipo}`);
+          });
+          doc.end();
+        } else if (format === 'xlsx') {
+          const workbook = new ExcelJS.Workbook();
+          const worksheet = workbook.addWorksheet('Usuários');
+          worksheet.columns = [
+            { header: 'ID', key: 'id', width: 10 },
+            { header: 'Nome', key: 'nome', width: 30 },
+            { header: 'Login', key: 'login', width: 20 },
+            { header: 'Tipo', key: 'tipo', width: 15 },
+          ];
+          worksheet.addRows(data);
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.setHeader('Content-Disposition', 'attachment; filename=usuarios.xlsx');
+          await workbook.xlsx.write(res);
+          res.end();
+        }
+      });
+    } else if (type === 'pendencias') {
+      db.all("SELECT p.id, p.placa, p.status, u.nome as criador_nome, d.nome as despachante_nome, p.criado_em, p.resolvido_em FROM pendencias p LEFT JOIN usuarios u ON p.criador_id = u.id LEFT JOIN usuarios d ON p.despachante_id = d.id", async (err, data) => {
+        if (err) return res.status(500).json({ error: 'Erro ao buscar pendências' });
+
+        if (format === 'pdf') {
+          const doc = new PDFDocument();
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', 'attachment; filename=pendencias.pdf');
+          doc.pipe(res);
+          doc.fontSize(18).text('Relatório de Pendências', { align: 'center' });
+          doc.moveDown();
+          data.forEach(p => {
+            doc.fontSize(12).text(`ID: ${p.id}, Placa: ${p.placa}, Status: ${p.status}, Criador: ${p.criador_nome}, Despachante: ${p.despachante_nome}`);
+          });
+          doc.end();
+        } else if (format === 'xlsx') {
+          const workbook = new ExcelJS.Workbook();
+          const worksheet = workbook.addWorksheet('Pendências');
+          worksheet.columns = [
+            { header: 'ID', key: 'id', width: 10 },
+            { header: 'Placa', key: 'placa', width: 15 },
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Criador', key: 'criador_nome', width: 30 },
+            { header: 'Despachante', key: 'despachante_nome', width: 30 },
+            { header: 'Criado Em', key: 'criado_em', width: 20 },
+            { header: 'Resolvido Em', key: 'resolvido_em', width: 20 },
+          ];
+          worksheet.addRows(data);
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.setHeader('Content-Disposition', 'attachment; filename=pendencias.xlsx');
+          await workbook.xlsx.write(res);
+          res.end();
+        }
+      });
+    } else {
+      res.status(400).json({ error: 'Tipo de relatório inválido' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao gerar relatório' });
+  }
+});
+
 app.post('/api/register', async (req, res) => {
   const { nome, tipo, login, senha } = req.body;
   if (!nome || !tipo || !login || !senha || tipo === 'admin') return res.status(400).json({ error: 'Dados inválidos' });
@@ -144,6 +240,46 @@ app.get('/api/session', (req, res) => {
   if (req.isAuthenticated()) return res.json({ user: req.user });
   res.status(401).json({ error: 'Não autenticado' });
 });
+
+app.post('/api/change-password', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Não autenticado' });
+  }
+
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ error: 'Senha antiga e nova são obrigatórias' });
+  }
+
+  const userId = req.user.id;
+
+  db.get("SELECT senha FROM usuarios WHERE id = ?", [userId], async (err, user) => {
+    if (err) {
+      return res.status(500).json({ error: 'Erro no banco de dados' });
+    }
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const passwordMatch = await bcrypt.compare(oldPassword, user.senha);
+    if (!passwordMatch) {
+      return res.status(400).json({ error: 'Senha antiga incorreta' });
+    }
+
+    try {
+      const hashedNewPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      db.run("UPDATE usuarios SET senha = ? WHERE id = ?", [hashedNewPassword, userId], function(err) {
+        if (err) {
+          return res.status(500).json({ error: 'Erro ao atualizar a senha' });
+        }
+        res.json({ message: 'Senha alterada com sucesso' });
+      });
+    } catch (hashError) {
+      res.status(500).json({ error: 'Erro no servidor ao processar a senha' });
+    }
+  });
+});
+
 app.get('/api/despachantes', async (req, res) => {
   db.all("SELECT id, nome FROM usuarios WHERE tipo = 'despachante'", (err, rows) => {
     if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
