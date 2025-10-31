@@ -380,8 +380,8 @@ const clientsByUserId = new Map();
 
 async function broadcastUpdate() {
     for (const client of wss.clients) {
-        if (client.readyState === WebSocket.OPEN && client.session.user) {
-            const userId = client.session.user.id;
+        if (client.readyState === WebSocket.OPEN && client.session.passport && client.session.passport.user) {
+            const userId = client.session.passport.user;
             db.all(
                 `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE (p.criador_id = ? OR p.despachante_id = ?) AND p.status != 'triado' ORDER BY p.criado_em DESC`,
                 [userId, userId],
@@ -407,8 +407,8 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (ws, request) => {
-  const user = request.session.user;
-  clientsByUserId.set(String(user.id), ws);
+  const userId = request.session.passport.user;
+  clientsByUserId.set(String(userId), ws);
   broadcastUpdate();
 
   ws.on('message', async (message) => {
