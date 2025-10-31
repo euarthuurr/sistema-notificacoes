@@ -17,7 +17,7 @@ const BCRYPT_ROUNDS = 10;
 const app = express();
 const server = http.createServer(app);
 
-const db = new sqlite3.Database('./database.db');
+const db = new sqlite3.Database('/data/database.sqlite');
 db.run('PRAGMA journal_mode = WAL;');
 
 function initializeDatabase() {

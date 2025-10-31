@@ -6,6 +6,8 @@ COPY package*.json ./
 
 RUN npm install
 
+RUN mkdir /data
+
 COPY . .
 
 EXPOSE 8080
