@@ -8,9 +8,11 @@
   --input-bg-color: #ffffff;
   --input-border-color: #ced4da;
   --primary-color: #0d6efd;
-  --notification-pendente-bg: #dc3545;
-  --notification-resolvido-bg: #198754;
+  --primary-text-color: #ffffff;
+  --notification-pendente-bg: #d9534f; /* Vermelho */
+  --notification-resolvido-bg: #5cb85c; /* Verde */
   --notification-text-color: #ffffff;
+  --highlight-bg-color: rgba(0, 0, 0, 0.07);
 }
 
 /* 2. Dark Theme Overrides */
@@ -22,6 +24,21 @@
   --input-bg-color: #2c2c2c;
   --input-border-color: #444444;
   --primary-color: #1976d2;
+  --notification-pendente-bg: #c9302c; /* Vermelho mais escuro */
+  --notification-resolvido-bg: #449d44; /* Verde mais escuro */
+  --notification-text-color: #e0e0e0;
+  --highlight-bg-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Sobrescreve estilos da tabela do Bootstrap para o modo escuro */
+[data-theme="dark"] .table {
+  --bs-table-color: var(--text-color);
+  --bs-table-bg: var(--card-bg-color);
+  --bs-table-border-color: var(--input-border-color);
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.05);
+  --bs-table-striped-color: var(--text-color);
+  --bs-table-active-bg: rgba(255, 255, 255, 0.1);
+  --bs-table-hover-bg: rgba(255, 255, 255, 0.075);
 }
 
 /* 3. General Styles */
@@ -31,6 +48,16 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
   padding-bottom: 50px;
+}
+
+/* Garante que os cabeçalhos também herdem a cor do tema */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-color);
+}
+
+/* Garante que os links também herdem a cor do tema */
+a {
+  color: var(--primary-color);
 }
 
 .card {
@@ -54,7 +81,7 @@ body {
 .notification-pendente { background-color: var(--notification-pendente-bg); }
 .notification-resolvido { background-color: var(--notification-resolvido-bg); }
 
-.plate-highlight { font-size: 1.4em; font-weight: bold; font-family: monospace; padding: 2px 6px; background-color: rgba(0,0,0,0.1); border-radius: 4px; display: inline-block; margin-bottom: 5px; }
+.plate-highlight { font-size: 1.4em; font-weight: bold; font-family: monospace; padding: 2px 6px; background-color: var(--highlight-bg-color); border-radius: 4px; display: inline-block; margin-bottom: 5px; }
 
 .form-label { color: var(--text-color); }
 .form-control, .form-select { background-color: var(--input-bg-color); border-color: var(--input-border-color); color: var(--text-color); }
@@ -63,7 +90,7 @@ body {
 .stat-card-container { display: flex; gap: 15px; margin-bottom: 20px; }
 .stat-card { background-color: var(--card-bg-color); padding: 10px 20px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; border: 1px solid var(--input-border-color); font-weight: 500; }
 .stat-card:hover { transform: translateY(-2px); box-shadow: var(--card-shadow); }
-.stat-card.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+.stat-card.active { background-color: var(--primary-color); color: var(--primary-text-color); border-color: var(--primary-color); }
 
 .theme-toggler { position: fixed; top: 15px; right: 15px; background: var(--card-bg-color); color: var(--text-color); border: 1px solid var(--input-border-color); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1050; }
 .navbar .theme-toggler { position: static; margin-left: 15px; }

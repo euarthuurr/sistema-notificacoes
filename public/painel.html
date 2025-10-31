@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -57,14 +56,37 @@
     </div>
   </div>
 
+  <!-- Reopen Pendencia Modal (for Funcionarios) -->
+  <div class="modal fade" id="reopenModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Reabrir Pendência</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <form id="reopenForm">
+            <input type="hidden" id="reopenPendenciaId">
+            <div class="mb-3"><label for="reopenDescricao" class="form-label">Nova Descrição (ou mantenha a atual)</label><textarea class="form-control" id="reopenDescricao" rows="4"></textarea></div>
+          </form>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="reopenPendenciaBtn">Reabrir</button></div>
+      </div>
+    </div>
+  </div>
+
   <footer>
     desenvolvido por AA™
   </footer>
 
 <script>
 const themeToggler = document.getElementById('themeToggler');
-function setTheme(theme) { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); themeToggler.innerHTML = theme === 'dark' ? '☀️' : '🌙'; }
-themeToggler.addEventListener('click', () => { const currentTheme = document.documentElement.getAttribute('data-theme'); setTheme(currentTheme === 'dark' ? 'light' : 'dark'); });
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    themeToggler.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+}
+themeToggler.addEventListener('click', () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
 const savedTheme = localStorage.getItem('theme');
 const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 if (savedTheme) { setTheme(savedTheme); } else if (prefersDark) { setTheme('dark'); } else { setTheme('light'); }
@@ -73,27 +95,60 @@ let ws;
 let currentUser = null;
 let allPendencias = [];
 let currentFilter = 'all';
+let reopenModal;
 
-function copyToClipboard(button, text) { navigator.clipboard.writeText(text).then(() => { const originalText = button.textContent; button.textContent = 'Copiado!'; setTimeout(() => { button.textContent = originalText; }, 1500); }).catch(err => console.error('Failed to copy text: ', err)); }
-function formatDate(dateString) { if (!dateString) return 'N/A'; return new Date(dateString).toLocaleString('pt-BR'); }
+function copyToClipboard(button, text) {
+    navigator.clipboard.writeText(text).then(() => {
+        const originalText = button.textContent;
+        button.textContent = 'Copiado!';
+        setTimeout(() => { button.textContent = originalText; }, 1500);
+    }).catch(err => console.error('Failed to copy text: ', err));
+}
 
-async function loadDespachantes() { try { const res = await fetch('/api/despachantes'); const { despachantes } = await res.json(); const select = document.getElementById('despachante'); select.innerHTML = '<option value="" disabled selected>Selecione um despachante</option>'; despachantes.forEach(d => { const option = document.createElement('option'); option.value = d.id; option.textContent = d.nome; select.appendChild(option); }); } catch (err) { console.error('Failed to load despachantes', err); } }
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString('pt-BR');
+}
+
+async function loadDespachantes() {
+    try {
+        const res = await fetch('/api/despachantes', { credentials: 'include' });
+        const { despachantes } = await res.json();
+        const select = document.getElementById('despachante');
+        select.innerHTML = '<option value="" disabled selected>Selecione um despachante</option>';
+        despachantes.forEach(d => {
+            const option = document.createElement('option');
+            option.value = d.id;
+            option.textContent = d.nome;
+            select.appendChild(option);
+        });
+    } catch (err) { console.error('Failed to load despachantes', err); }
+}
 
 async function init() {
   try {
-    const sessionRes = await fetch('/api/session');
+    reopenModal = new bootstrap.Modal(document.getElementById('reopenModal'));
+
+    const sessionRes = await fetch('/api/session', { credentials: 'include' });
     if (!sessionRes.ok) throw new Error('Not authenticated');
     const { user } = await sessionRes.json();
     currentUser = user;
 
-    if (currentUser.tipo === 'funcionario') { loadDespachantes(); } 
-    else { document.getElementById('area-funcionario').style.display = 'none'; }
+    if (currentUser.tipo === 'funcionario') {
+        loadDespachantes();
+    } else {
+        document.getElementById('area-funcionario').style.display = 'none';
+    }
 
     ws = new WebSocket(`ws://${window.location.host}`);
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'error') { alert(msg.message); }
-        else if (msg.type === 'update' || msg.type === 'initialPendencias') { allPendencias = msg.pendencias; renderNotifications(); }
+        if (msg.type === 'error') {
+            alert(msg.message);
+        } else if (msg.type === 'update' || msg.type === 'initialPendencias') {
+            allPendencias = msg.pendencias;
+            renderNotifications();
+        }
     };
   } catch (err) { window.location.href = '/'; }
 }
@@ -110,7 +165,10 @@ function renderNotifications() {
 
   const filteredPendencias = allPendencias.filter(p => currentFilter === 'all' || p.status === currentFilter);
 
-  if (filteredPendencias.length === 0) { container.innerHTML = '<p class="text-center col-12">Nenhuma notificação encontrada.</p>'; return; }
+  if (filteredPendencias.length === 0) {
+      container.innerHTML = '<p class="text-center col-12">Nenhuma notificação encontrada.</p>';
+      return;
+  }
 
   filteredPendencias.forEach(p => {
     const col = document.createElement('div');
@@ -125,14 +183,20 @@ function renderNotifications() {
         else { actionButtons += `<button class="btn btn-light btn-sm mt-2" onclick="changeStatus(${p.id}, 'pendente')">↩️ Marcar como Pendente</button>`; }
     }
     if (currentUser.tipo === 'funcionario') {
-        actionButtons += `<button class="btn btn-warning btn-sm mt-2 ms-1" onclick="changeStatus(${p.id}, 'triar')">📁 Arquivar (Triar)</button>`;
+        if (p.status === 'resolvido') {
+            actionButtons += `<button class="btn btn-info btn-sm mt-2 ms-1" onclick="showReopenModal(${p.id}, '${p.descricao.replace(/'/g, "\\'")}')">↩️ Reabrir Pendência</button>`;
+        }
     }
+
+    const creatorLine = currentUser.tipo !== 'despachante' 
+        ? `<strong>👤 Criado por:</strong> ${p.criador_nome}<br>` 
+        : '<strong>👤 Criado por:</strong> Detran<br>';
 
     card.innerHTML = `
         <div class="plate-highlight">${p.placa}</div>
         <button class="btn btn-secondary btn-sm py-0" onclick="copyToClipboard(this, '${p.placa}')">Copiar Placa</button><hr>
         <strong>📄 Descrição:</strong> ${p.descricao || '<em>Sem descrição</em>'}<br>
-        <strong>👤 Criado por:</strong> ${p.criador_nome}<br>
+        ${creatorLine}
         <strong>🙋‍♂️ Para:</strong> ${p.despachante_nome}<br>
         <small><strong>Criado em:</strong> ${formatDate(p.criado_em)}</small><br>
         ${p.status === 'resolvido' ? `<small><strong>Resolvido em:</strong> ${formatDate(p.resolvido_em)}</small><br>` : ''}
@@ -144,13 +208,37 @@ function renderNotifications() {
   });
 }
 
-function setFilter(filter) { currentFilter = filter; document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active')); document.getElementById(`filter-${filter}`).classList.add('active'); renderNotifications(); }
+function setFilter(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
+    document.getElementById(`filter-${filter}`).classList.add('active');
+    renderNotifications();
+}
 
 document.getElementById('filter-all').addEventListener('click', () => setFilter('all'));
 document.getElementById('filter-pendente').addEventListener('click', () => setFilter('pendente'));
 document.getElementById('filter-resolvido').addEventListener('click', () => setFilter('resolvido'));
 
-function changeStatus(id, newStatus) { if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ type: newStatus, pendenciaId: id })); } }
+function changeStatus(id, newStatus) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: newStatus, pendenciaId: id }));
+    }
+}
+
+function showReopenModal(id, currentDescription) {
+    document.getElementById('reopenPendenciaId').value = id;
+    document.getElementById('reopenDescricao').value = currentDescription;
+    reopenModal.show();
+}
+
+document.getElementById('reopenPendenciaBtn').addEventListener('click', () => {
+    const id = document.getElementById('reopenPendenciaId').value;
+    const newDescription = document.getElementById('reopenDescricao').value;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'reabrir', pendenciaId: id, descricao: newDescription }));
+    }
+    reopenModal.hide();
+});
 
 document.getElementById('pendenciaForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -159,11 +247,20 @@ document.getElementById('pendenciaForm').addEventListener('submit', async (e) =>
   const descricao = document.getElementById('descricao').value;
   const despachante_id = document.getElementById('despachante').value;
   if (!despachante_id) { alert('Por favor, selecione um despachante.'); return; }
-  const res = await fetch('/api/pendencias', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ placa, descricao, criador_id: currentUser.id, despachante_id }) });
-  if (res.ok) { document.getElementById('pendenciaForm').reset(); } else { alert('Erro ao criar pendência'); }
+  const res = await fetch('/api/pendencias', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ placa, descricao, criador_id: currentUser.id, despachante_id }),
+    credentials: 'include'
+  });
+  if (res.ok) { document.getElementById('pendenciaForm').reset(); } 
+  else { alert('Erro ao criar pendência'); }
 });
 
-document.getElementById('logoutBtn').addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; });
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+  window.location.href = '/';
+});
 
 init();
 </script>

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  # Serviço da sua Aplicação Node.js
+  app:
+    build: . # Constrói a imagem a partir do Dockerfile no diretório atual
+    container_name: sisnotificacao-app
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mapeia o diretório atual para /app, mas ignora a node_modules local.
+      # Isso garante que o banco de dados (database.db) seja persistente.
+      - .:/app
+      - /app/node_modules

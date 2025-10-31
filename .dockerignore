@@ -1,21 +1,4 @@
-# Arquivos e pastas a serem ignorados pelo Docker ao construir a imagem.
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Pasta de dependências do Node.js (será instalada dentro do container)
+# Ignora a pasta de dependências locais para não sobrescrever a do contêiner
 node_modules
-
-# Arquivos de ambiente (se houver, devem ser gerenciados fora da imagem)
-.env
-
-# Arquivos do Docker
-Dockerfile
-.dockerignore
-
-# Banco de dados local (deve ser montado como um volume, não copiado para a imagem)
-database.sqlite
+# Ignora o arquivo de log do npm
+npm-debug.log

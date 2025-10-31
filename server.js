@@ -8,9 +8,10 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const session = require('express-session');
-const cookieParser = require('cookie-parser');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const SQLiteStore = require('connect-sqlite3')(session);
 
-// --- Helper Functions ---
 function isSameDay(dateString) {
     if (!dateString) return false;
     const date = new Date(dateString);
@@ -20,102 +21,174 @@ function isSameDay(dateString) {
            date.getDate() === today.getDate();
 }
 
-// --- Basic Setup ---
-const DBSOURCE = "database.sqlite";
 const PORT = process.env.PORT || 8080;
 const BCRYPT_ROUNDS = 10;
 const app = express();
-const server = http.createServer(app); // SERVER IS DECLARED HERE
+const server = http.createServer(app);
 
-// --- Database Initialization ---
-const db = new sqlite3.Database(DBSOURCE, (err) => {
-  if (err) return console.error("Erro ao conectar ao DB:", err);
-  console.log("Conectado ao SQLite.");
+const db = new sqlite3.Database('./database.db');
+db.run('PRAGMA journal_mode = WAL;');
 
-  // Attach listener only after DB connection is successful
-  db.on('change', broadcastUpdate); 
+function initializeDatabase() {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      db.run(`CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, nome TEXT, tipo TEXT, login TEXT UNIQUE, senha TEXT)`);
+      db.run(`CREATE TABLE IF NOT EXISTS pendencias (id INTEGER PRIMARY KEY, placa TEXT, descricao TEXT, status TEXT, criador_id INTEGER, despachante_id INTEGER, criado_em DATETIME, resolvido_em DATETIME)`);
+      
+      // Gera o hash da senha 'admin'
+      bcrypt.hash('admin', BCRYPT_ROUNDS, (err, hashed) => {
+        if (err) return reject(err);
 
-  db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT, tipo TEXT, login TEXT UNIQUE, senha TEXT)`);
-    db.run(`CREATE TABLE IF NOT EXISTS pendencias (id INTEGER PRIMARY KEY AUTOINCREMENT, placa TEXT, descricao TEXT, status TEXT, criador_id INTEGER, despachante_id INTEGER, criado_em DATETIME, resolvido_em DATETIME)`);
-    
-    db.get("SELECT * FROM usuarios WHERE tipo = 'admin'", async (err, row) => {
-        if (!row) {
-            console.log('Criando usuário admin padrão...');
-            const hashed = await bcrypt.hash('admin', BCRYPT_ROUNDS);
-            db.run("INSERT INTO usuarios (nome, tipo, login, senha) VALUES ('Administrador', 'admin', 'admin', ?)", [hashed]);
-        }
+        const sql = `INSERT OR IGNORE INTO usuarios (nome, tipo, login, senha) VALUES (?, 'admin', 'admin', ?)`;
+        db.run(sql, ['Administrador', hashed], function(err) {
+          if (err) return reject(err);
+          if (this.changes > 0) console.log('USUÁRIO "admin" COM SENHA "admin" CRIADO COM SUCESSO.');
+          else console.log('Usuário "admin" já existe. Nenhuma ação necessária.');
+          resolve();
+        });
+      });
     });
   });
-});
+}
 
-// --- Middleware Setup ---
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(bodyParser.json());
-app.use(cookieParser());
+
 const sessionParser = session({
+  store: new SQLiteStore({
+    client: db
+  }),
   saveUninitialized: false,
   secret: 'uma_chave_secreta_modifique_em_producao',
   resave: false,
-  cookie: { maxAge: 1000 * 60 * 60 }
+  cookie: {
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production'
+  }
 });
 app.use(sessionParser);
 
-// --- API Routes ---
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(new LocalStrategy(
+  {
+    usernameField: 'login',    // Diz ao Passport para usar o campo 'login'
+    passwordField: 'senha'     // Diz ao Passport para usar o campo 'senha'
+  },
+  function(login, senha, done) { // Os parâmetros aqui continuam os mesmos
+    db.get("SELECT * FROM usuarios WHERE login = ?", [login], async (err, user) => {
+      if (err) { return done(err); }
+      if (!user) { return done(null, false, { message: 'Usuário não encontrado.' }); }
+      
+      const passwordMatch = await bcrypt.compare(senha, user.senha);
+      if (!passwordMatch) { return done(null, false, { message: 'Senha incorreta.' }); }
+      
+      return done(null, user);
+    });
+  }
+));
+
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  db.get("SELECT id, nome, tipo FROM usuarios WHERE id = ?", [id], (err, user) => {
+    if (err) return done(err);
+    done(null, user);
+  });
+});
+
+app.use((req, res, next) => {
+  const time = new Date().toISOString();
+  console.log(`[${time}] REQUISIÇÃO: ${req.method} ${req.originalUrl} | SessionID: ${req.sessionID}`);
+  next();
+});
 const isAdmin = (req, res, next) => {
-    if (req.session && req.session.user && req.session.user.tipo === 'admin') return next();
+    if (req.isAuthenticated() && req.user.tipo === 'admin') return next();
     res.status(403).json({ error: 'Acesso negado' });
 };
 
 app.post('/api/register', async (req, res) => {
   const { nome, tipo, login, senha } = req.body;
   if (!nome || !tipo || !login || !senha || tipo === 'admin') return res.status(400).json({ error: 'Dados inválidos' });
-  const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
-  db.run("INSERT INTO usuarios (nome, tipo, login, senha) VALUES (?, ?, ?, ?)", [nome, tipo, login, hashed], (err) => {
+  try {
+    const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
+    db.run("INSERT INTO usuarios (nome, tipo, login, senha) VALUES (?, ?, ?, ?)", [nome, tipo, login, hashed], function(err) {
       if (err) return res.status(400).json({ error: 'Login já existe' });
       res.json({ message: 'Usuário cadastrado' });
-  });
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro no servidor' });
+  }
 });
-app.post('/api/login', (req, res) => {
-  const { login, senha } = req.body;
-  db.get("SELECT * FROM usuarios WHERE login = ?", [login], async (err, user) => {
-    if (!user || !(await bcrypt.compare(senha, user.senha))) {
-      return res.status(401).json({ error: 'Credenciais incorretas' });
-    }
-    req.session.user = { id: user.id, nome: user.nome, tipo: user.tipo };
-    res.json({ user: req.session.user });
-  });
+
+app.post('/api/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) { return next(err); }
+    if (!user) { return res.status(401).json({ error: 'Credenciais incorretas' }); }
+    
+    req.logIn(user, (err) => {
+      if (err) { return next(err); }
+      
+      if (req.body.manterConectado) {
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 dias
+      }
+      
+      return res.json({ user: { id: user.id, nome: user.nome, tipo: user.tipo } });
+    });
+  })(req, res, next);
 });
+
 app.post('/api/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  req.logout(() => {
+    res.json({ ok: true });
+  });
 });
 app.get('/api/session', (req, res) => {
-  if (req.session && req.session.user) return res.json({ user: req.session.user });
+  if (req.isAuthenticated()) return res.json({ user: req.user });
   res.status(401).json({ error: 'Não autenticado' });
 });
-app.get('/api/despachantes', (req, res) => {
-  db.all("SELECT id, nome FROM usuarios WHERE tipo = 'despachante'", [], (err, rows) => res.json({ despachantes: rows || [] }));
+app.get('/api/despachantes', async (req, res) => {
+  db.all("SELECT id, nome FROM usuarios WHERE tipo = 'despachante'", (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
+    res.json({ despachantes: rows || [] });
+  });
 });
-app.get('/api/pendencias', (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
-  const userId = req.session.user.id;
+app.get('/api/pendencias', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Não autenticado' });
+  const userId = req.user.id;
   db.all(
     `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE (p.criador_id = ? OR p.despachante_id = ?) AND p.status != 'triado' ORDER BY p.criado_em DESC`,
     [userId, userId],
-    (err, rows) => res.json({ pendencias: rows || [] })
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
+      res.json({ pendencias: rows || [] });
+    }
   );
 });
-app.post('/api/pendencias', (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Não autenticado' });
+app.post('/api/pendencias', async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: 'Não autenticado' });
   const { placa, descricao, despachante_id } = req.body;
-  const criador_id = req.session.user.id;
-  db.run("INSERT INTO pendencias (placa, descricao, criador_id, despachante_id, status, criado_em) VALUES (?, ?, ?, ?, 'pendente', CURRENT_TIMESTAMP)", 
-    [placa, descricao || '', criador_id, despachante_id], 
-    () => res.json({ message: 'Pendência criada' })
+  const criador_id = req.user.id;
+  db.run("INSERT INTO pendencias (placa, descricao, criador_id, despachante_id, status, criado_em) VALUES (?, ?, ?, ?, 'pendente', datetime('now'))", 
+    [placa, descricao || '', criador_id, despachante_id],
+    function(err) {
+      if (err) return res.status(500).json({ error: 'Erro ao criar pendência' });
+      broadcastUpdate();
+      res.json({ message: 'Pendência criada' });
+    }
   );
 });
-app.get('/api/admin/users', isAdmin, (req, res) => {
-    db.all("SELECT id, nome, tipo, login FROM usuarios", [], (err, rows) => res.json(rows || []));
+app.get('/api/admin/users', isAdmin, async (req, res) => {
+    db.all("SELECT id, nome, tipo, login FROM usuarios", (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
+        res.json(rows || []);
+    });
 });
 app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { nome, tipo, login, senha } = req.body;
@@ -127,61 +200,58 @@ app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     }
     res.json({ message: 'Usuário atualizado' });
 });
-app.delete('/api/admin/users/:id', isAdmin, (req, res) => {
-    if (req.session.user.id == req.params.id) return res.status(400).json({ error: 'Não pode deletar a si mesmo' });
-    db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id], () => res.json({ message: 'Usuário deletado' }));
+app.delete('/api/admin/users/:id', isAdmin, async (req, res) => {
+    if (req.user.id == req.params.id) return res.status(400).json({ error: 'Não pode deletar a si mesmo' });
+    db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: 'Erro ao deletar usuário' });
+        res.json({ message: 'Usuário deletado' });
+    });
 });
-app.get('/api/admin/pendencias', isAdmin, (req, res) => {
-    db.all(
+app.get('/api/admin/pendencias', isAdmin, async (req, res) => {
+    try {
+        db.all(
         `SELECT p.*, u_criador.nome as criador_nome, u_despachante.nome as despachante_nome
         FROM pendencias p
         LEFT JOIN usuarios u_criador ON p.criador_id = u_criador.id
         LEFT JOIN usuarios u_despachante ON p.despachante_id = u_despachante.id
-        ORDER BY p.criado_em DESC`,
-        [],
-        (err, rows) => {
+        ORDER BY p.criado_em DESC`, (err, rows) => {
             if (err) return res.status(500).json({ error: 'Erro DB' });
             res.json(rows || []);
         }
-    );
+        );
+    } catch (err) {
+        res.status(500).json({ error: 'Erro DB' });
+    }
 });
-app.put('/api/admin/pendencias/:id', isAdmin, (req, res) => {
+app.put('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
     const { placa, descricao, status } = req.body;
-    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", 
-        [placa, descricao, status, req.params.id], 
-        (err) => {
-            if (err) return res.status(500).json({ error: 'Erro ao atualizar pendência' });
-            res.json({ message: 'Pendência atualizada com sucesso.' });
-        }
-    );
+    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id]);
+    broadcastUpdate();
+    res.json({ message: 'Pendência atualizada com sucesso.' });
 });
-app.delete('/api/admin/pendencias/:id', isAdmin, (req, res) => {
-    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id], () => res.json({ message: 'Pendência deletada' }));
+app.delete('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
+    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id]);
+    broadcastUpdate();
+    res.json({ message: 'Pendência deletada' });
 });
 
-// --- Static File Server ---
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// --- WebSocket Server ---
 const wss = new WebSocket.Server({ noServer: true });
 const clientsByUserId = new Map();
 
-function broadcastUpdate() {
-    wss.clients.forEach(client => {
+async function broadcastUpdate() {
+    for (const client of wss.clients) {
         if (client.readyState === WebSocket.OPEN && client.session.user) {
             const userId = client.session.user.id;
             db.all(
                 `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE (p.criador_id = ? OR p.despachante_id = ?) AND p.status != 'triado' ORDER BY p.criado_em DESC`,
                 [userId, userId],
                 (err, rows) => {
+                    if (err) return;
                     if(rows) client.send(JSON.stringify({ type: 'update', pendencias: rows }));
                 }
             );
         }
-    });
+    }
 }
 
 server.on('upgrade', (request, socket, head) => {
@@ -199,39 +269,56 @@ wss.on('connection', (ws, request) => {
   clientsByUserId.set(String(user.id), ws);
   broadcastUpdate();
 
-  ws.on('message', (message) => {
+  ws.on('message', async (message) => {
     const msg = JSON.parse(message.toString());
-    const { type, pendenciaId } = msg;
+    const { type, pendenciaId, descricao } = msg;
     if (!type || !pendenciaId) return;
 
-    if (type === 'triar') {
-        if (ws.session.user.tipo !== 'funcionario') {
-            return ws.send(JSON.stringify({ type: 'error', message: 'Apenas funcionários podem triar pendências.' }));
+    try {
+        if (type === 'reabrir') {
+          if (ws.session.user.tipo !== 'funcionario') {
+            return ws.send(JSON.stringify({ type: 'error', message: 'Apenas funcionários podem reabrir pendências.' }));
+          }
+          db.run("UPDATE pendencias SET status = 'pendente', descricao = ?, resolvido_em = NULL WHERE id = ?", [descricao, pendenciaId]);
         }
-        db.run("UPDATE pendencias SET status = 'triado' WHERE id = ?", [pendenciaId]);
-        return;
-    }
-
-    if (type === 'resolver' || type === 'pendente') {
-        if (ws.session.user.tipo !== 'despachante') {
-            return ws.send(JSON.stringify({ type: 'error', message: 'Apenas despachantes podem alterar este status.' }));
-        }
-        db.get("SELECT * FROM pendencias WHERE id = ?", [pendenciaId], (err, pendencia) => {
-            if (!pendencia) return;
-            const lastUpdate = type === 'resolver' ? pendencia.criado_em : pendencia.resolvido_em;
-            if (!isSameDay(lastUpdate)) {
-                return ws.send(JSON.stringify({ type: 'error', message: 'Alteração permitida apenas no mesmo dia.' }));
+    
+        if (type === 'resolver' || type === 'pendente') {
+            if (ws.session.user.tipo !== 'despachante') {
+                return ws.send(JSON.stringify({ type: 'error', message: 'Ação não permitida para seu perfil.' }));
             }
-            const sql = type === 'resolver'
-                ? "UPDATE pendencias SET status = 'resolvido\', resolvido_em = CURRENT_TIMESTAMP WHERE id = ?"
-                : "UPDATE pendencias SET status = 'pendente\', resolvido_em = NULL WHERE id = ?";
-            db.run(sql, [pendenciaId]);
-        });
+            db.get("SELECT * FROM pendencias WHERE id = ?", [pendenciaId], (err, pendencia) => {
+                if (err || !pendencia) return;
+                if (type === 'resolver') {
+                    db.run("UPDATE pendencias SET status = ?, resolvido_em = datetime('now') WHERE id = ?", ['resolvido', pendenciaId]);
+                } else { // type === 'pendente'
+                    db.run("UPDATE pendencias SET status = ?, resolvido_em = NULL WHERE id = ?", ['pendente', pendenciaId]);
+                }
+            });
+        }
+        broadcastUpdate();
+    } catch (err) {
+        console.error("Erro no WebSocket:", err);
     }
   });
 
   ws.on('close', () => clientsByUserId.delete(String(user.id)));
 });
 
-// --- Server Listen ---
-server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+async function startServer() {
+  try {
+    await initializeDatabase();
+    console.log("Banco de dados inicializado e verificado.");
+    server.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+  } catch (err) {
+    console.error("FALHA CRÍTICA AO INICIAR O SERVIDOR:", err);
+    process.exit(1);
+  }
+}
+
+startServer();
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use((req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});

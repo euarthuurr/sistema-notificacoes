@@ -17,11 +17,15 @@
       <form id="loginForm">
         <div class="mb-3">
           <label for="login" class="form-label">Usuário</label>
-          <input type="text" class="form-control" id="login" required>
+          <input type="text" class="form-control" id="login" required autocomplete="username">
         </div>
         <div class="mb-3">
           <label for="senha" class="form-label">Senha</label>
-          <input type="password" class="form-control" id="senha" required>
+          <input type="password" class="form-control" id="senha" required autocomplete="current-password">
+        </div>
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="manterConectado">
+          <label class="form-check-label" for="manterConectado">Manter conectado</label>
         </div>
         <button type="submit" class="btn btn-primary w-100">Entrar</button>
       </form>
@@ -50,19 +54,35 @@ if (savedTheme) { setTheme(savedTheme); } else if (prefersDark) { setTheme('dark
 // Login Logic
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const login = document.getElementById('login').value;
-  const senha = document.getElementById('senha').value;
-  const res = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login, senha })
-  });
-  if (res.ok) {
+
+  const login = document.getElementById('login').value.trim();
+  const senha = document.getElementById('senha').value.trim();
+  const manterConectado = document.getElementById('manterConectado').checked;
+
+  if (!login || !senha) {
+    alert('Por favor, preencha login e senha.');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, senha, manterConectado }),
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      alert('Login inválido');
+      return;
+    }
+
     const { user } = await res.json();
-    if (user.tipo === 'admin') window.location.href = '/admin.html';
-    else window.location.href = '/painel.html';
-  } else {
-    alert('Login inválido');
+    window.location.href = user.tipo === 'admin' ? '/admin.html' : '/painel.html';
+
+  } catch (err) {
+    console.error('Erro ao fazer login:', err);
+    alert('Erro de rede. Tente novamente.');
   }
 });
 </script>
