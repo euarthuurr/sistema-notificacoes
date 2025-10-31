@@ -162,18 +162,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-(async function() {
-    try {
-        const res = await fetch('/api/session', { credentials: 'include' });
-        if (!res.ok) throw new Error('Sessão inválida');
-        const { user } = await res.json();
-        if (user.tipo !== 'admin') throw new Error('Acesso negado');
-    } catch (e) {
-        alert(e.message || 'Você precisa ser um administrador para acessar esta página.');
-        window.location.href = '/';
-    }
-})();
-
 const themeToggler = document.getElementById('themeToggler');
 function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);

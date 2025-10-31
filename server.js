@@ -1,3 +1,4 @@
+require('dotenv').config();
 process.env.TZ = 'America/Boa_Vista';
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -11,15 +12,22 @@ const session = require('express-session');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const SQLiteStore = require('connect-sqlite3')(session);
-const PDFDocument = require('pdfkit');
-const ExcelJS = require('exceljs');
+
+function isSameDay(dateString) {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    const today = new Date();
+    return date.getFullYear() === today.getFullYear() &&
+           date.getMonth() === today.getMonth() &&
+           date.getDate() === today.getDate();
+}
 
 const PORT = process.env.PORT || 8080;
 const BCRYPT_ROUNDS = 10;
 const app = express();
 const server = http.createServer(app);
 
-const db = new sqlite3.Database('/data/database.sqlite');
+const db = new sqlite3.Database('./database.db');
 db.run('PRAGMA journal_mode = WAL;');
 
 function initializeDatabase() {
@@ -51,15 +59,15 @@ app.use(cors({
 app.use(bodyParser.json());
 
 const sessionParser = session({
-  store: new SQLiteStore({
-    client: db
-  }),
-  saveUninitialized: false,
-  secret: process.env.SESSION_SECRET || 'uma_chave_secreta_modifique_em_producao',
+  store: new SQLiteStore({ db: 'sessions.db' }),
+  secret: process.env.SESSION_SECRET,
   resave: false,
+  saveUninitialized: false,
   cookie: {
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production'
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 2, // 2 horas
+    sameSite: 'strict'
   }
 });
 app.use(sessionParser);
@@ -106,100 +114,6 @@ const isAdmin = (req, res, next) => {
     res.status(403).json({ error: 'Acesso negado' });
 };
 
-app.get('/api/admin/stats', isAdmin, async (req, res) => {
-  try {
-    const userCount = await new Promise((resolve, reject) => {
-      db.get("SELECT COUNT(*) as count FROM usuarios", (err, row) => err ? reject(err) : resolve(row.count));
-    });
-    const pendenteCount = await new Promise((resolve, reject) => {
-      db.get("SELECT COUNT(*) as count FROM pendencias WHERE status = 'pendente'", (err, row) => err ? reject(err) : resolve(row.count));
-    });
-    const resolvidoCount = await new Promise((resolve, reject) => {
-      db.get("SELECT COUNT(*) as count FROM pendencias WHERE status = 'resolvido'", (err, row) => err ? reject(err) : resolve(row.count));
-    });
-    res.json({ userCount, pendenteCount, resolvidoCount });
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao buscar estatísticas' });
-  }
-});
-
-app.get('/api/admin/report', isAdmin, async (req, res) => {
-  const { type, format } = req.query;
-
-  try {
-    if (type === 'users') {
-      db.all("SELECT id, nome, login, tipo FROM usuarios", async (err, data) => {
-        if (err) return res.status(500).json({ error: 'Erro ao buscar usuários' });
-
-        if (format === 'pdf') {
-          const doc = new PDFDocument();
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', 'attachment; filename=usuarios.pdf');
-          doc.pipe(res);
-          doc.fontSize(18).text('Relatório de Usuários', { align: 'center' });
-          doc.moveDown();
-          data.forEach(user => {
-            doc.fontSize(12).text(`ID: ${user.id}, Nome: ${user.nome}, Login: ${user.login}, Tipo: ${user.tipo}`);
-          });
-          doc.end();
-        } else if (format === 'xlsx') {
-          const workbook = new ExcelJS.Workbook();
-          const worksheet = workbook.addWorksheet('Usuários');
-          worksheet.columns = [
-            { header: 'ID', key: 'id', width: 10 },
-            { header: 'Nome', key: 'nome', width: 30 },
-            { header: 'Login', key: 'login', width: 20 },
-            { header: 'Tipo', key: 'tipo', width: 15 },
-          ];
-          worksheet.addRows(data);
-          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-          res.setHeader('Content-Disposition', 'attachment; filename=usuarios.xlsx');
-          await workbook.xlsx.write(res);
-          res.end();
-        }
-      });
-    } else if (type === 'pendencias') {
-      db.all("SELECT p.id, p.placa, p.status, u.nome as criador_nome, d.nome as despachante_nome, p.criado_em, p.resolvido_em FROM pendencias p LEFT JOIN usuarios u ON p.criador_id = u.id LEFT JOIN usuarios d ON p.despachante_id = d.id", async (err, data) => {
-        if (err) return res.status(500).json({ error: 'Erro ao buscar pendências' });
-
-        if (format === 'pdf') {
-          const doc = new PDFDocument();
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', 'attachment; filename=pendencias.pdf');
-          doc.pipe(res);
-          doc.fontSize(18).text('Relatório de Pendências', { align: 'center' });
-          doc.moveDown();
-          data.forEach(p => {
-            doc.fontSize(12).text(`ID: ${p.id}, Placa: ${p.placa}, Status: ${p.status}, Criador: ${p.criador_nome}, Despachante: ${p.despachante_nome}`);
-          });
-          doc.end();
-        } else if (format === 'xlsx') {
-          const workbook = new ExcelJS.Workbook();
-          const worksheet = workbook.addWorksheet('Pendências');
-          worksheet.columns = [
-            { header: 'ID', key: 'id', width: 10 },
-            { header: 'Placa', key: 'placa', width: 15 },
-            { header: 'Status', key: 'status', width: 15 },
-            { header: 'Criador', key: 'criador_nome', width: 30 },
-            { header: 'Despachante', key: 'despachante_nome', width: 30 },
-            { header: 'Criado Em', key: 'criado_em', width: 20 },
-            { header: 'Resolvido Em', key: 'resolvido_em', width: 20 },
-          ];
-          worksheet.addRows(data);
-          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-          res.setHeader('Content-Disposition', 'attachment; filename=pendencias.xlsx');
-          await workbook.xlsx.write(res);
-          res.end();
-        }
-      });
-    } else {
-      res.status(400).json({ error: 'Tipo de relatório inválido' });
-    }
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao gerar relatório' });
-  }
-});
-
 app.post('/api/register', async (req, res) => {
   const { nome, tipo, login, senha } = req.body;
   if (!nome || !tipo || !login || !senha || tipo === 'admin') return res.status(400).json({ error: 'Dados inválidos' });
@@ -216,17 +130,19 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
-    if (err) { return next(err); }
-    if (!user) { return res.status(401).json({ error: 'Credenciais incorretas' }); }
+    if (err) return next(err);
+    if (!user) return res.status(401).json({ error: 'Credenciais incorretas' });
     
     req.logIn(user, (err) => {
-      if (err) { return next(err); }
+      if (err) return next(err);
       
       if (req.body.manterConectado) {
         req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 dias
       }
       
-      return res.json({ user: { id: user.id, nome: user.nome, tipo: user.tipo } });
+      req.session.save(() => {
+        res.json({ user: { id: user.id, nome: user.nome, tipo: user.tipo } });
+      });
     });
   })(req, res, next);
 });
@@ -240,46 +156,6 @@ app.get('/api/session', (req, res) => {
   if (req.isAuthenticated()) return res.json({ user: req.user });
   res.status(401).json({ error: 'Não autenticado' });
 });
-
-app.post('/api/change-password', async (req, res) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Não autenticado' });
-  }
-
-  const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) {
-    return res.status(400).json({ error: 'Senha antiga e nova são obrigatórias' });
-  }
-
-  const userId = req.user.id;
-
-  db.get("SELECT senha FROM usuarios WHERE id = ?", [userId], async (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Erro no banco de dados' });
-    }
-    if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
-
-    const passwordMatch = await bcrypt.compare(oldPassword, user.senha);
-    if (!passwordMatch) {
-      return res.status(400).json({ error: 'Senha antiga incorreta' });
-    }
-
-    try {
-      const hashedNewPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-      db.run("UPDATE usuarios SET senha = ? WHERE id = ?", [hashedNewPassword, userId], function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Erro ao atualizar a senha' });
-        }
-        res.json({ message: 'Senha alterada com sucesso' });
-      });
-    } catch (hashError) {
-      res.status(500).json({ error: 'Erro no servidor ao processar a senha' });
-    }
-  });
-});
-
 app.get('/api/despachantes', async (req, res) => {
   db.all("SELECT id, nome FROM usuarios WHERE tipo = 'despachante'", (err, rows) => {
     if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
@@ -319,22 +195,13 @@ app.get('/api/admin/users', isAdmin, async (req, res) => {
 });
 app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { nome, tipo, login, senha } = req.body;
-    try {
-        if (senha) {
-            const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
-            db.run("UPDATE usuarios SET nome=?, tipo=?, login=?, senha=? WHERE id=?", [nome, tipo, login, hashed, req.params.id], function(err) {
-                if (err) return res.status(500).json({ error: 'Erro ao atualizar usuário' });
-                res.json({ message: 'Usuário atualizado' });
-            });
-        } else {
-            db.run("UPDATE usuarios SET nome=?, tipo=?, login=? WHERE id=?", [nome, tipo, login, req.params.id], function(err) {
-                if (err) return res.status(500).json({ error: 'Erro ao atualizar usuário' });
-                res.json({ message: 'Usuário atualizado' });
-            });
-        }
-    } catch (err) {
-        res.status(500).json({ error: 'Erro no servidor' });
+    if (senha) {
+        const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
+        db.run("UPDATE usuarios SET nome=?, tipo=?, login=?, senha=? WHERE id=?", [nome, tipo, login, hashed, req.params.id]);
+    } else {
+        db.run("UPDATE usuarios SET nome=?, tipo=?, login=? WHERE id=?", [nome, tipo, login, req.params.id]);
     }
+    res.json({ message: 'Usuário atualizado' });
 });
 app.delete('/api/admin/users/:id', isAdmin, async (req, res) => {
     if (req.user.id == req.params.id) return res.status(400).json({ error: 'Não pode deletar a si mesmo' });
@@ -361,18 +228,14 @@ app.get('/api/admin/pendencias', isAdmin, async (req, res) => {
 });
 app.put('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
     const { placa, descricao, status } = req.body;
-    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: 'Erro ao atualizar pendência' });
-        broadcastUpdate();
-        res.json({ message: 'Pendência atualizada com sucesso.' });
-    });
+    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id]);
+    broadcastUpdate();
+    res.json({ message: 'Pendência atualizada com sucesso.' });
 });
 app.delete('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
-    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: 'Erro ao deletar pendência' });
-        broadcastUpdate();
-        res.json({ message: 'Pendência deletada' });
-    });
+    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id]);
+    broadcastUpdate();
+    res.json({ message: 'Pendência deletada' });
 });
 
 const wss = new WebSocket.Server({ noServer: true });
@@ -396,9 +259,7 @@ async function broadcastUpdate() {
 
 server.on('upgrade', (request, socket, head) => {
   sessionParser(request, {}, () => {
-    if (!request.session.passport || !request.session.passport.user) {
-      return socket.destroy();
-    }
+    if (!request.session.user) return socket.destroy();
     wss.handleUpgrade(request, socket, head, (ws) => {
       ws.session = request.session;
       wss.emit('connection', ws, request);
