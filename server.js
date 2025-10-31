@@ -12,15 +12,6 @@ const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const SQLiteStore = require('connect-sqlite3')(session);
 
-function isSameDay(dateString) {
-    if (!dateString) return false;
-    const date = new Date(dateString);
-    const today = new Date();
-    return date.getFullYear() === today.getFullYear() &&
-           date.getMonth() === today.getMonth() &&
-           date.getDate() === today.getDate();
-}
-
 const PORT = process.env.PORT || 8080;
 const BCRYPT_ROUNDS = 10;
 const app = express();
@@ -62,7 +53,7 @@ const sessionParser = session({
     client: db
   }),
   saveUninitialized: false,
-  secret: 'uma_chave_secreta_modifique_em_producao',
+  secret: process.env.SESSION_SECRET || 'uma_chave_secreta_modifique_em_producao',
   resave: false,
   cookie: {
     sameSite: 'strict',
@@ -192,13 +183,22 @@ app.get('/api/admin/users', isAdmin, async (req, res) => {
 });
 app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { nome, tipo, login, senha } = req.body;
-    if (senha) {
-        const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
-        db.run("UPDATE usuarios SET nome=?, tipo=?, login=?, senha=? WHERE id=?", [nome, tipo, login, hashed, req.params.id]);
-    } else {
-        db.run("UPDATE usuarios SET nome=?, tipo=?, login=? WHERE id=?", [nome, tipo, login, req.params.id]);
+    try {
+        if (senha) {
+            const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
+            db.run("UPDATE usuarios SET nome=?, tipo=?, login=?, senha=? WHERE id=?", [nome, tipo, login, hashed, req.params.id], function(err) {
+                if (err) return res.status(500).json({ error: 'Erro ao atualizar usuário' });
+                res.json({ message: 'Usuário atualizado' });
+            });
+        } else {
+            db.run("UPDATE usuarios SET nome=?, tipo=?, login=? WHERE id=?", [nome, tipo, login, req.params.id], function(err) {
+                if (err) return res.status(500).json({ error: 'Erro ao atualizar usuário' });
+                res.json({ message: 'Usuário atualizado' });
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Erro no servidor' });
     }
-    res.json({ message: 'Usuário atualizado' });
 });
 app.delete('/api/admin/users/:id', isAdmin, async (req, res) => {
     if (req.user.id == req.params.id) return res.status(400).json({ error: 'Não pode deletar a si mesmo' });
@@ -225,14 +225,18 @@ app.get('/api/admin/pendencias', isAdmin, async (req, res) => {
 });
 app.put('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
     const { placa, descricao, status } = req.body;
-    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id]);
-    broadcastUpdate();
-    res.json({ message: 'Pendência atualizada com sucesso.' });
+    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: 'Erro ao atualizar pendência' });
+        broadcastUpdate();
+        res.json({ message: 'Pendência atualizada com sucesso.' });
+    });
 });
 app.delete('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
-    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id]);
-    broadcastUpdate();
-    res.json({ message: 'Pendência deletada' });
+    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id], function(err) {
+        if (err) return res.status(500).json({ error: 'Erro ao deletar pendência' });
+        broadcastUpdate();
+        res.json({ message: 'Pendência deletada' });
+    });
 });
 
 const wss = new WebSocket.Server({ noServer: true });
@@ -256,7 +260,9 @@ async function broadcastUpdate() {
 
 server.on('upgrade', (request, socket, head) => {
   sessionParser(request, {}, () => {
-    if (!request.session.user) return socket.destroy();
+    if (!request.session.passport || !request.session.passport.user) {
+      return socket.destroy();
+    }
     wss.handleUpgrade(request, socket, head, (ws) => {
       ws.session = request.session;
       wss.emit('connection', ws, request);
