@@ -6,4 +6,4 @@ services:
     ports:
       - "8081:8080"
     volumes:
-      - /home/sn/hom/database.sqlite:/data/database.sqlite
+      - /home/sn/hom:/data
