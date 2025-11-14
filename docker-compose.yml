@@ -1,9 +1,14 @@
 services:
-  app:
-    build: .
-    container_name: sisnotificacao-app
-    restart: always
+  # Serviço do Backend (API, DB, WebSocket)
+  backend:
+    build:
+      context: . # Constrói a partir da pasta atual (g:\projetos\sisnotificacao)
+      dockerfile: Dockerfile
+    container_name: sisnotificacao-backend
+    restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "8080:8080" # Expõe a porta 8080 para o host
+    env_file: .env # Carrega o SESSION_SECRET
     volumes:
-      - /home/sn/hom:/data
+      - ./database.db:/app/database.db # Persiste o banco de dados
+      - ./sessions.db:/app/sessions.db # Persiste as sessões

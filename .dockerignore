@@ -1,4 +1,12 @@
-# Ignora a pasta de dependências locais para não sobrescrever a do contêiner
 node_modules
-# Ignora o arquivo de log do npm
-npm-debug.log
+bkp-node_modules
+.nuxt
+.output
+dist
+jules-scratch
+.env
+sessions.db
+database.db
+database.db-shm
+database.db-wal
+Dockerfile
