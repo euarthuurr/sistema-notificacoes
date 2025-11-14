@@ -27,8 +27,17 @@ const BCRYPT_ROUNDS = 10;
 const app = express();
 const server = http.createServer(app);
 
+if (!process.env.SESSION_SECRET) {
+  console.error('FATAL ERROR: A variável de ambiente SESSION_SECRET não está definida.');
+  console.error('Crie um arquivo .env e adicione a linha: SESSION_SECRET=seu-segredo-aqui');
+  process.exit(1);
+}
+
 const db = new sqlite3.Database('./database.db');
+db.configure('busyTimeout', 10000);
 db.run('PRAGMA journal_mode = WAL;');
+db.run('PRAGMA synchronous = FULL;');
+db.run('PRAGMA foreign_keys = ON;');
 
 function initializeDatabase() {
   return new Promise((resolve, reject) => {
@@ -120,10 +129,15 @@ app.post('/api/register', async (req, res) => {
   try {
     const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
     db.run("INSERT INTO usuarios (nome, tipo, login, senha) VALUES (?, ?, ?, ?)", [nome, tipo, login, hashed], function(err) {
-      if (err) return res.status(400).json({ error: 'Login já existe' });
-      res.json({ message: 'Usuário cadastrado' });
+      if (err) {
+        console.error('Erro ao inserir usuário:', err);
+        return res.status(400).json({ error: 'Login já existe' });
+      }
+      console.log(`[REGISTRO] Usuário criado com sucesso: ${login} (ID: ${this.lastID})`);
+      res.json({ message: 'Usuário cadastrado', userId: this.lastID });
     });
   } catch (err) {
+    console.error('Erro no servidor:', err);
     res.status(500).json({ error: 'Erro no servidor' });
   }
 });
@@ -156,6 +170,13 @@ app.get('/api/session', (req, res) => {
   if (req.isAuthenticated()) return res.json({ user: req.user });
   res.status(401).json({ error: 'Não autenticado' });
 });
+
+app.get('/api/health', (req, res) => {
+  db.get("SELECT COUNT(*) as count FROM usuarios", (err, row) => {
+    if (err) return res.status(500).json({ status: 'error', message: err.message });
+    res.json({ status: 'ok', usuarios: row.count });
+  });
+});
 app.get('/api/despachantes', async (req, res) => {
   db.all("SELECT id, nome FROM usuarios WHERE tipo = 'despachante'", (err, rows) => {
     if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
@@ -165,9 +186,18 @@ app.get('/api/despachantes', async (req, res) => {
 app.get('/api/pendencias', async (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ error: 'Não autenticado' });
   const userId = req.user.id;
+  const userType = req.user.tipo;
+
+  let query = `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE p.status != 'triado'`;
+  const params = [];
+
+  if (userType !== 'admin') {
+    query += ` AND (p.criador_id = ? OR p.despachante_id = ?)`;
+    params.push(userId, userId);
+  }
   db.all(
-    `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE (p.criador_id = ? OR p.despachante_id = ?) AND p.status != 'triado' ORDER BY p.criado_em DESC`,
-    [userId, userId],
+    `${query} ORDER BY p.criado_em DESC`,
+    params,
     (err, rows) => {
       if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
       res.json({ pendencias: rows || [] });
@@ -188,20 +218,32 @@ app.post('/api/pendencias', async (req, res) => {
   );
 });
 app.get('/api/admin/users', isAdmin, async (req, res) => {
-    db.all("SELECT id, nome, tipo, login FROM usuarios", (err, rows) => {
-        if (err) return res.status(500).json({ error: 'Erro no banco de dados' });
+    db.all("SELECT id, nome, tipo, login FROM usuarios ORDER BY id ASC", (err, rows) => {
+        if (err) {
+            console.error('Erro ao listar usuários:', err);
+            return res.status(500).json({ error: 'Erro no banco de dados' });
+        }
         res.json(rows || []);
     });
 });
 app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { nome, tipo, login, senha } = req.body;
-    if (senha) {
-        const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
-        db.run("UPDATE usuarios SET nome=?, tipo=?, login=?, senha=? WHERE id=?", [nome, tipo, login, hashed, req.params.id]);
-    } else {
-        db.run("UPDATE usuarios SET nome=?, tipo=?, login=? WHERE id=?", [nome, tipo, login, req.params.id]);
+    try {
+        if (senha) {
+            const hashed = await bcrypt.hash(senha, BCRYPT_ROUNDS);
+            db.run("UPDATE usuarios SET nome=?, tipo=?, login=?, senha=? WHERE id=?", [nome, tipo, login, hashed, req.params.id], function(err) {
+                if (err) return res.status(400).json({ error: 'Erro ao atualizar usuário' });
+                res.json({ message: 'Usuário atualizado' });
+            });
+        } else {
+            db.run("UPDATE usuarios SET nome=?, tipo=?, login=? WHERE id=?", [nome, tipo, login, req.params.id], function(err) {
+                if (err) return res.status(400).json({ error: 'Erro ao atualizar usuário' });
+                res.json({ message: 'Usuário atualizado' });
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Erro no servidor' });
     }
-    res.json({ message: 'Usuário atualizado' });
 });
 app.delete('/api/admin/users/:id', isAdmin, async (req, res) => {
     if (req.user.id == req.params.id) return res.status(400).json({ error: 'Não pode deletar a si mesmo' });
@@ -228,14 +270,18 @@ app.get('/api/admin/pendencias', isAdmin, async (req, res) => {
 });
 app.put('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
     const { placa, descricao, status } = req.body;
-    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id]);
-    broadcastUpdate();
-    res.json({ message: 'Pendência atualizada com sucesso.' });
+    db.run("UPDATE pendencias SET placa = ?, descricao = ?, status = ? WHERE id = ?", [placa, descricao, status, req.params.id], function(err) {
+        if (err) return res.status(400).json({ error: 'Erro ao atualizar pendência' });
+        broadcastUpdate();
+        res.json({ message: 'Pendência atualizada com sucesso.' });
+    });
 });
 app.delete('/api/admin/pendencias/:id', isAdmin, async (req, res) => {
-    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id]);
-    broadcastUpdate();
-    res.json({ message: 'Pendência deletada' });
+    db.run("DELETE FROM pendencias WHERE id = ?", [req.params.id], function(err) {
+        if (err) return res.status(400).json({ error: 'Erro ao deletar pendência' });
+        broadcastUpdate();
+        res.json({ message: 'Pendência deletada' });
+    });
 });
 
 const wss = new WebSocket.Server({ noServer: true });
@@ -245,9 +291,17 @@ async function broadcastUpdate() {
     for (const client of wss.clients) {
         if (client.readyState === WebSocket.OPEN && client.session.user) {
             const userId = client.session.user.id;
+            const userType = client.session.user.tipo;
+            let query = `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE p.status != 'triado'`;
+            const params = [];
+            if (userType !== 'admin') {
+                query += ` AND (p.criador_id = ? OR p.despachante_id = ?)`;
+                params.push(userId, userId);
+            }
+
             db.all(
-                `SELECT p.*, u.nome as criador_nome, d.nome as despachante_nome FROM pendencias p JOIN usuarios u ON p.criador_id = u.id JOIN usuarios d ON p.despachante_id = d.id WHERE (p.criador_id = ? OR p.despachante_id = ?) AND p.status != 'triado' ORDER BY p.criado_em DESC`,
-                [userId, userId],
+                `${query} ORDER BY p.criado_em DESC`,
+                params,
                 (err, rows) => {
                     if (err) return;
                     if(rows) client.send(JSON.stringify({ type: 'update', pendencias: rows }));
