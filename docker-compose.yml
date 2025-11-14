@@ -1,6 +1,6 @@
 services:
   # Serviço do Backend (API, DB, WebSocket)
-  backend:
+  app:
     build:
       context: . # Constrói a partir da pasta atual (g:\projetos\sisnotificacao)
       dockerfile: Dockerfile
